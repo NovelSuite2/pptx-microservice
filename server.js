@@ -4,46 +4,51 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
+const https = require("https");
+const http = require("http");
 
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 
-// ─── Health check ────────────────────────────────────────────────────────────
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// ─── Main endpoint ───────────────────────────────────────────────────────────
-// POST /generate-slide
-// Body: {
-//   topBarColor: "C0392B",          // hex, no #  (from global YAML)
-//   heading:     "The Heart Foundation",
-//   bodyText:    "Welcome to...",
-//   imageBase64: "iVBORw0KGgo..."   // raw base64, no data-URI prefix
-// }
+function downloadImage(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith("https") ? https : http;
+    client.get(url, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("base64")));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
 app.post("/generate-slide", async (req, res) => {
   try {
-    const { topBarColor, heading, bodyText, imageBase64 } = req.body;
+    const { topBarColor, heading, bodyText, imageUrl, imageBase64 } = req.body;
 
-    if (!topBarColor || !heading || !bodyText || !imageBase64) {
-      return res.status(400).json({
-        error: "Missing required fields: topBarColor, heading, bodyText, imageBase64",
-      });
+    if (!heading || !bodyText) {
+      return res.status(400).json({ error: "Missing required fields: heading, bodyText" });
     }
 
-    // ── Build slide ──────────────────────────────────────────────────────────
+    let imgBase64 = imageBase64;
+    if (!imgBase64 && imageUrl) {
+      imgBase64 = await downloadImage(imageUrl);
+    }
+
     const pres = new PptxGenJS();
-    pres.layout = "LAYOUT_16x9"; // 10 x 5.625 in
+    pres.layout = "LAYOUT_16x9";
 
     const slide = pres.addSlide();
     slide.background = { color: "F0F0F0" };
 
-    // Top bar
     slide.addShape(pres.shapes.RECTANGLE, {
       x: 0, y: 0, w: 10, h: 0.8,
-      fill: { color: topBarColor },
-      line: { color: topBarColor, width: 0 },
+      fill: { color: topBarColor || "4A72B0" },
+      line: { color: topBarColor || "4A72B0", width: 0 },
     });
 
-    // House logo — triangle roof + rectangle body
     slide.addShape(pres.shapes.ISOSCELES_TRIANGLE, {
       x: 0.44, y: 0.1, w: 0.42, h: 0.22,
       fill: { color: "FFFFFF" },
@@ -55,13 +60,13 @@ app.post("/generate-slide", async (req, res) => {
       line: { color: "FFFFFF", width: 0 },
     });
 
-    // Character image (square, fills left column)
-    slide.addImage({
-      data: "image/png;base64," + imageBase64,
-      x: 0.5, y: 1.35, w: 3.3, h: 3.3,
-    });
+    if (imgBase64) {
+      slide.addImage({
+        data: "image/png;base64," + imgBase64,
+        x: 0.5, y: 1.35, w: 3.3, h: 3.3,
+      });
+    }
 
-    // Heading
     slide.addText(heading, {
       x: 4.3, y: 1.35, w: 5.2, h: 0.85,
       fontSize: 28,
@@ -74,7 +79,6 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0,
     });
 
-    // Body text
     slide.addText([{ text: bodyText }], {
       x: 4.3, y: 2.2, w: 5.2, h: 2.0,
       fontSize: 18,
@@ -87,7 +91,6 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0,
     });
 
-    // Next button
     const btnX = 8.3, btnY = 4.675, btnW = 1.2, btnH = 0.45;
     slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
       x: btnX, y: btnY, w: btnW, h: btnH,
@@ -105,7 +108,6 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0,
     });
 
-    // ── Write to temp file, stream back, then delete ─────────────────────────
     const tmpFile = path.join(os.tmpdir(), `slide-${crypto.randomUUID()}.pptx`);
     await pres.writeFile({ fileName: tmpFile });
 
