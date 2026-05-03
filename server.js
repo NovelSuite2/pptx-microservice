@@ -15,11 +15,14 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 function downloadImage(url) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
+
     client
       .get(url, (res) => {
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks).toString("base64")));
+        res.on("end", () =>
+          resolve(Buffer.concat(chunks).toString("base64"))
+        );
         res.on("error", reject);
       })
       .on("error", reject);
@@ -31,24 +34,49 @@ function num(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function bool(value, fallback) {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return fallback;
+}
+
 app.post("/generate-slide", async (req, res) => {
   try {
     const {
-      topBarColor,
       heading,
       bodyText,
       imageUrl,
       imageBase64,
 
+      backgroundColor,
+      topBarColor,
+      topBarHeight,
+
       contentTop,
+
       leftColumnX,
       leftColumnWidth,
       rightColumnX,
       rightColumnWidth,
+
       headingFontSize,
+      headingFontFace,
+      headingColor,
+      headingBold,
+      headingAlign,
+
       bodyFontSize,
+      bodyFontFace,
+      bodyColor,
+      bodyAlign,
+
       spacingBelowHeading,
-      paragraphSpacing
+      paragraphSpacingPt,
+
+      imageX,
+      imageY,
+      imageWidth,
+      imageHeight
     } = req.body;
 
     if (!heading || !bodyText) {
@@ -57,17 +85,38 @@ app.post("/generate-slide", async (req, res) => {
       });
     }
 
+    const safeBackgroundColor = backgroundColor || "F0F0F0";
+    const safeTopBarColor = topBarColor || "4A72B0";
+    const safeTopBarHeight = num(topBarHeight, 0.8);
+
     const safeContentTop = num(contentTop, 1.35);
+
     const safeLeftColumnX = num(leftColumnX, 0.5);
     const safeLeftColumnWidth = num(leftColumnWidth, 3.3);
     const safeRightColumnX = num(rightColumnX, 4.3);
     const safeRightColumnWidth = num(rightColumnWidth, 5.2);
+
     const safeHeadingFontSize = num(headingFontSize, 28);
+    const safeHeadingFontFace = headingFontFace || "Calibri";
+    const safeHeadingColor = headingColor || "111111";
+    const safeHeadingBold = bool(headingBold, true);
+    const safeHeadingAlign = headingAlign || "left";
+
     const safeBodyFontSize = num(bodyFontSize, 18);
-    const safeSpacingBelowHeading = num(spacingBelowHeading, 0.25);
-    const safeParagraphSpacing = num(paragraphSpacing, 0.15);
+    const safeBodyFontFace = bodyFontFace || "Calibri";
+    const safeBodyColor = bodyColor || "111111";
+    const safeBodyAlign = bodyAlign || "left";
+
+    const safeSpacingBelowHeading = num(spacingBelowHeading, 0.3);
+    const safeParagraphSpacingPt = num(paragraphSpacingPt, 3);
+
+    const safeImageX = num(imageX, safeLeftColumnX);
+    const safeImageY = num(imageY, safeContentTop);
+    const safeImageWidth = num(imageWidth, safeLeftColumnWidth);
+    const safeImageHeight = num(imageHeight, 3.3);
 
     let imgBase64 = imageBase64;
+
     if (!imgBase64 && imageUrl) {
       imgBase64 = await downloadImage(imageUrl);
     }
@@ -76,15 +125,18 @@ app.post("/generate-slide", async (req, res) => {
     pres.layout = "LAYOUT_16x9";
 
     const slide = pres.addSlide();
-    slide.background = { color: "F0F0F0" };
+
+    slide.background = {
+      color: safeBackgroundColor
+    };
 
     slide.addShape(pres.shapes.RECTANGLE, {
       x: 0,
       y: 0,
       w: 10,
-      h: 0.8,
-      fill: { color: topBarColor || "4A72B0" },
-      line: { color: topBarColor || "4A72B0", width: 0 }
+      h: safeTopBarHeight,
+      fill: { color: safeTopBarColor },
+      line: { color: safeTopBarColor, width: 0 }
     });
 
     slide.addShape(pres.shapes.ISOSCELES_TRIANGLE, {
@@ -108,10 +160,10 @@ app.post("/generate-slide", async (req, res) => {
     if (imgBase64) {
       slide.addImage({
         data: "image/png;base64," + imgBase64,
-        x: safeLeftColumnX,
-        y: safeContentTop,
-        w: safeLeftColumnWidth,
-        h: 3.3
+        x: safeImageX,
+        y: safeImageY,
+        w: safeImageWidth,
+        h: safeImageHeight
       });
     }
 
@@ -121,10 +173,10 @@ app.post("/generate-slide", async (req, res) => {
       w: safeRightColumnWidth,
       h: 0.85,
       fontSize: safeHeadingFontSize,
-      fontFace: "Calibri",
-      bold: true,
-      color: "111111",
-      align: "left",
+      fontFace: safeHeadingFontFace,
+      bold: safeHeadingBold,
+      color: safeHeadingColor,
+      align: safeHeadingAlign,
       valign: "top",
       wrap: true,
       margin: 0
@@ -138,14 +190,14 @@ app.post("/generate-slide", async (req, res) => {
       w: safeRightColumnWidth,
       h: 2.0,
       fontSize: safeBodyFontSize,
-      fontFace: "Calibri",
-      color: "111111",
-      align: "left",
+      fontFace: safeBodyFontFace,
+      color: safeBodyColor,
+      align: safeBodyAlign,
       valign: "top",
       wrap: true,
       lineSpacingMultiple: 1.2,
       breakLine: false,
-      paraSpaceAfterPt: safeParagraphSpacing * 20,
+      paraSpaceAfterPt: safeParagraphSpacingPt,
       margin: 0
     });
 
@@ -177,13 +229,18 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0
     });
 
-    const tmpFile = path.join(os.tmpdir(), `slide-${crypto.randomUUID()}.pptx`);
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `slide-${crypto.randomUUID()}.pptx`
+    );
+
     await pres.writeFile({ fileName: tmpFile });
 
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     );
+
     res.setHeader(
       "Content-Disposition",
       'attachment; filename="Slide_1.pptx"'
@@ -199,6 +256,7 @@ app.post("/generate-slide", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () =>
   console.log(`PPTX microservice running on port ${PORT}`)
 );
