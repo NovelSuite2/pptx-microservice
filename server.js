@@ -17,21 +17,30 @@ function downloadImage(url) {
     const client = url.startsWith("https") ? https : http;
 
     client
-      .get(url, (res) => {
+      .get(url, (response) => {
         const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () =>
-          resolve(Buffer.concat(chunks).toString("base64"))
-        );
-        res.on("error", reject);
+
+        response.on("data", (chunk) => chunks.push(chunk));
+
+        response.on("end", () => {
+          resolve(Buffer.concat(chunks).toString("base64"));
+        });
+
+        response.on("error", reject);
       })
       .on("error", reject);
   });
 }
 
 function num(value, fallback) {
-  const n = Number(value);
+  const cleaned = String(value ?? "").replace(/=/g, "").trim();
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function str(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return String(value).replace(/=/g, "").trim();
 }
 
 function bool(value, fallback) {
@@ -54,8 +63,6 @@ app.post("/generate-slide", async (req, res) => {
 
       contentTop,
 
-      leftColumnX,
-      leftColumnWidth,
       rightColumnX,
       rightColumnWidth,
 
@@ -85,34 +92,34 @@ app.post("/generate-slide", async (req, res) => {
       });
     }
 
-    const safeBackgroundColor = backgroundColor || "F0F0F0";
-    const safeTopBarColor = topBarColor || "4A72B0";
+    const safeBackgroundColor = str(backgroundColor, "F0F0F0");
+    const safeTopBarColor = str(topBarColor, "4A72B0");
     const safeTopBarHeight = num(topBarHeight, 0.8);
 
     const safeContentTop = num(contentTop, 1.35);
 
-    const safeLeftColumnX = num(leftColumnX, 0.5);
-    const safeLeftColumnWidth = num(leftColumnWidth, 3.3);
-    const safeRightColumnX = num(rightColumnX, 4.3);
-    const safeRightColumnWidth = num(rightColumnWidth, 5.2);
+    // TEXT ALWAYS USES RIGHT COLUMN
+    const safeTextX = num(rightColumnX, 4.3);
+    const safeTextWidth = num(rightColumnWidth, 5.2);
 
     const safeHeadingFontSize = num(headingFontSize, 28);
-    const safeHeadingFontFace = headingFontFace || "Calibri";
-    const safeHeadingColor = headingColor || "111111";
+    const safeHeadingFontFace = str(headingFontFace, "Calibri");
+    const safeHeadingColor = str(headingColor, "111111");
     const safeHeadingBold = bool(headingBold, true);
-    const safeHeadingAlign = headingAlign || "left";
+    const safeHeadingAlign = str(headingAlign, "left");
 
     const safeBodyFontSize = num(bodyFontSize, 18);
-    const safeBodyFontFace = bodyFontFace || "Calibri";
-    const safeBodyColor = bodyColor || "111111";
-    const safeBodyAlign = bodyAlign || "left";
+    const safeBodyFontFace = str(bodyFontFace, "Calibri");
+    const safeBodyColor = str(bodyColor, "111111");
+    const safeBodyAlign = str(bodyAlign, "left");
 
     const safeSpacingBelowHeading = num(spacingBelowHeading, 0.3);
     const safeParagraphSpacingPt = num(paragraphSpacingPt, 3);
 
-    const safeImageX = num(imageX, safeLeftColumnX);
-    const safeImageY = num(imageY, safeContentTop);
-    const safeImageWidth = num(imageWidth, safeLeftColumnWidth);
+    // IMAGE USES IMAGE RULES ONLY
+    const safeImageX = num(imageX, 0.5);
+    const safeImageY = num(imageY, 1.35);
+    const safeImageWidth = num(imageWidth, 3.3);
     const safeImageHeight = num(imageHeight, 3.3);
 
     let imgBase64 = imageBase64;
@@ -130,6 +137,7 @@ app.post("/generate-slide", async (req, res) => {
       color: safeBackgroundColor
     };
 
+    // Top bar
     slide.addShape(pres.shapes.RECTANGLE, {
       x: 0,
       y: 0,
@@ -139,6 +147,7 @@ app.post("/generate-slide", async (req, res) => {
       line: { color: safeTopBarColor, width: 0 }
     });
 
+    // Simple white home icon
     slide.addShape(pres.shapes.ISOSCELES_TRIANGLE, {
       x: 0.44,
       y: 0.1,
@@ -157,6 +166,7 @@ app.post("/generate-slide", async (req, res) => {
       line: { color: "FFFFFF", width: 0 }
     });
 
+    // Image on left
     if (imgBase64) {
       slide.addImage({
         data: "image/png;base64," + imgBase64,
@@ -167,10 +177,11 @@ app.post("/generate-slide", async (req, res) => {
       });
     }
 
+    // Heading on right
     slide.addText(heading, {
-      x: safeRightColumnX,
+      x: safeTextX,
       y: safeContentTop,
-      w: safeRightColumnWidth,
+      w: safeTextWidth,
       h: 0.85,
       fontSize: safeHeadingFontSize,
       fontFace: safeHeadingFontFace,
@@ -184,10 +195,11 @@ app.post("/generate-slide", async (req, res) => {
 
     const bodyY = safeContentTop + 0.85 + safeSpacingBelowHeading;
 
+    // Body text on right
     slide.addText([{ text: bodyText }], {
-      x: safeRightColumnX,
+      x: safeTextX,
       y: bodyY,
-      w: safeRightColumnWidth,
+      w: safeTextWidth,
       h: 2.0,
       fontSize: safeBodyFontSize,
       fontFace: safeBodyFontFace,
@@ -201,6 +213,7 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0
     });
 
+    // Next button
     const btnX = 8.3;
     const btnY = 4.675;
     const btnW = 1.2;
@@ -229,10 +242,7 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0
     });
 
-    const tmpFile = path.join(
-      os.tmpdir(),
-      `slide-${crypto.randomUUID()}.pptx`
-    );
+    const tmpFile = path.join(os.tmpdir(), `slide-${crypto.randomUUID()}.pptx`);
 
     await pres.writeFile({ fileName: tmpFile });
 
@@ -257,6 +267,6 @@ app.post("/generate-slide", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () =>
-  console.log(`PPTX microservice running on port ${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`PPTX microservice running on port ${PORT}`);
+});
