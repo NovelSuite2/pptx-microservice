@@ -89,7 +89,19 @@ app.post("/generate-slide", async (req, res) => {
       imageX,
       imageY,
       imageWidth,
-      imageHeight
+      imageHeight,
+
+      nextBtnX,
+      nextBtnY,
+      nextBtnWidth,
+      nextBtnHeight,
+      nextBtnLabel,
+
+      backBtnX,
+      backBtnY,
+      backBtnWidth,
+      backBtnHeight,
+      backBtnLabel
     } = req.body;
 
     if (!heading || !bodyText) {
@@ -131,6 +143,18 @@ app.post("/generate-slide", async (req, res) => {
     const safeImageY = num(imageY, 1.35);
     const safeImageWidth = num(imageWidth, 3.3);
     const safeImageHeight = num(imageHeight, 3.3);
+
+    const safeNextBtnX = num(nextBtnX, 8.3);
+    const safeNextBtnY = num(nextBtnY, 5.05);
+    const safeNextBtnWidth = num(nextBtnWidth, 1.2);
+    const safeNextBtnHeight = num(nextBtnHeight, 0.45);
+    const safeNextBtnLabel = str(nextBtnLabel, "Next >");
+
+    const safeBackBtnX = num(backBtnX, 0.5);
+    const safeBackBtnY = num(backBtnY, 5.05);
+    const safeBackBtnWidth = num(backBtnWidth, 1.2);
+    const safeBackBtnHeight = num(backBtnHeight, 0.45);
+    const safeBackBtnLabel = str(backBtnLabel, "< Back");
 
     let imgBase64 = imageBase64;
 
@@ -174,7 +198,7 @@ app.post("/generate-slide", async (req, res) => {
       });
     }
 
-    // Main slide image from slide YAML URL + global image position rules
+    // Main slide image
     if (imgBase64) {
       slide.addImage({
         data: "image/png;base64," + imgBase64,
@@ -185,7 +209,7 @@ app.post("/generate-slide", async (req, res) => {
       });
     }
 
-    // Heading on right
+    // Heading
     slide.addText(heading, {
       x: safeTextX,
       y: safeContentTop,
@@ -203,7 +227,7 @@ app.post("/generate-slide", async (req, res) => {
 
     const bodyY = safeContentTop + 0.85 + safeSpacingBelowHeading;
 
-    // Body text on right
+    // Body text
     slide.addText([{ text: bodyText }], {
       x: safeTextX,
       y: bodyY,
@@ -221,27 +245,46 @@ app.post("/generate-slide", async (req, res) => {
       margin: 0
     });
 
-    // Next button
-    const btnX = 8.3;
-    const btnY = 4.675;
-    const btnW = 1.2;
-    const btnH = 0.45;
-
+    // Back button
     slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
-      x: btnX,
-      y: btnY,
-      w: btnW,
-      h: btnH,
+      x: safeBackBtnX,
+      y: safeBackBtnY,
+      w: safeBackBtnWidth,
+      h: safeBackBtnHeight,
       fill: { color: "E0E0E0" },
       line: { color: "BBBBBB", width: 1 },
       rectRadius: 0.05
     });
 
-    slide.addText("Next >", {
-      x: btnX,
-      y: btnY,
-      w: btnW,
-      h: btnH,
+    slide.addText(safeBackBtnLabel, {
+      x: safeBackBtnX,
+      y: safeBackBtnY,
+      w: safeBackBtnWidth,
+      h: safeBackBtnHeight,
+      fontSize: 14,
+      fontFace: "Calibri",
+      color: "111111",
+      align: "center",
+      valign: "middle",
+      margin: 0
+    });
+
+    // Next button
+    slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
+      x: safeNextBtnX,
+      y: safeNextBtnY,
+      w: safeNextBtnWidth,
+      h: safeNextBtnHeight,
+      fill: { color: "E0E0E0" },
+      line: { color: "BBBBBB", width: 1 },
+      rectRadius: 0.05
+    });
+
+    slide.addText(safeNextBtnLabel, {
+      x: safeNextBtnX,
+      y: safeNextBtnY,
+      w: safeNextBtnWidth,
+      h: safeNextBtnHeight,
       fontSize: 14,
       fontFace: "Calibri",
       color: "111111",
