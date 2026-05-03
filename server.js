@@ -15,22 +15,57 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 function downloadImage(url) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
-    client.get(url, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => resolve(Buffer.concat(chunks).toString("base64")));
-      res.on("error", reject);
-    }).on("error", reject);
+    client
+      .get(url, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => resolve(Buffer.concat(chunks).toString("base64")));
+        res.on("error", reject);
+      })
+      .on("error", reject);
   });
+}
+
+function num(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 app.post("/generate-slide", async (req, res) => {
   try {
-    const { topBarColor, heading, bodyText, imageUrl, imageBase64 } = req.body;
+    const {
+      topBarColor,
+      heading,
+      bodyText,
+      imageUrl,
+      imageBase64,
+
+      contentTop,
+      leftColumnX,
+      leftColumnWidth,
+      rightColumnX,
+      rightColumnWidth,
+      headingFontSize,
+      bodyFontSize,
+      spacingBelowHeading,
+      paragraphSpacing
+    } = req.body;
 
     if (!heading || !bodyText) {
-      return res.status(400).json({ error: "Missing required fields: heading, bodyText" });
+      return res.status(400).json({
+        error: "Missing required fields: heading, bodyText"
+      });
     }
+
+    const safeContentTop = num(contentTop, 1.35);
+    const safeLeftColumnX = num(leftColumnX, 0.5);
+    const safeLeftColumnWidth = num(leftColumnWidth, 3.3);
+    const safeRightColumnX = num(rightColumnX, 4.3);
+    const safeRightColumnWidth = num(rightColumnWidth, 5.2);
+    const safeHeadingFontSize = num(headingFontSize, 28);
+    const safeBodyFontSize = num(bodyFontSize, 18);
+    const safeSpacingBelowHeading = num(spacingBelowHeading, 0.25);
+    const safeParagraphSpacing = num(paragraphSpacing, 0.15);
 
     let imgBase64 = imageBase64;
     if (!imgBase64 && imageUrl) {
@@ -44,75 +79,115 @@ app.post("/generate-slide", async (req, res) => {
     slide.background = { color: "F0F0F0" };
 
     slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0, y: 0, w: 10, h: 0.8,
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 0.8,
       fill: { color: topBarColor || "4A72B0" },
-      line: { color: topBarColor || "4A72B0", width: 0 },
+      line: { color: topBarColor || "4A72B0", width: 0 }
     });
 
     slide.addShape(pres.shapes.ISOSCELES_TRIANGLE, {
-      x: 0.44, y: 0.1, w: 0.42, h: 0.22,
+      x: 0.44,
+      y: 0.1,
+      w: 0.42,
+      h: 0.22,
       fill: { color: "FFFFFF" },
-      line: { color: "FFFFFF", width: 0 },
+      line: { color: "FFFFFF", width: 0 }
     });
+
     slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0.5, y: 0.3, w: 0.3, h: 0.26,
+      x: 0.5,
+      y: 0.3,
+      w: 0.3,
+      h: 0.26,
       fill: { color: "FFFFFF" },
-      line: { color: "FFFFFF", width: 0 },
+      line: { color: "FFFFFF", width: 0 }
     });
 
     if (imgBase64) {
       slide.addImage({
         data: "image/png;base64," + imgBase64,
-        x: 0.5, y: 1.35, w: 3.3, h: 3.3,
+        x: safeLeftColumnX,
+        y: safeContentTop,
+        w: safeLeftColumnWidth,
+        h: 3.3
       });
     }
 
     slide.addText(heading, {
-      x: 4.3, y: 1.35, w: 5.2, h: 0.85,
-      fontSize: 28,
+      x: safeRightColumnX,
+      y: safeContentTop,
+      w: safeRightColumnWidth,
+      h: 0.85,
+      fontSize: safeHeadingFontSize,
       fontFace: "Calibri",
       bold: true,
       color: "111111",
       align: "left",
       valign: "top",
       wrap: true,
-      margin: 0,
+      margin: 0
     });
 
+    const bodyY = safeContentTop + 0.85 + safeSpacingBelowHeading;
+
     slide.addText([{ text: bodyText }], {
-      x: 4.3, y: 2.2, w: 5.2, h: 2.0,
-      fontSize: 18,
+      x: safeRightColumnX,
+      y: bodyY,
+      w: safeRightColumnWidth,
+      h: 2.0,
+      fontSize: safeBodyFontSize,
       fontFace: "Calibri",
       color: "111111",
       align: "left",
       valign: "top",
       wrap: true,
       lineSpacingMultiple: 1.2,
-      margin: 0,
+      breakLine: false,
+      paraSpaceAfterPt: safeParagraphSpacing * 20,
+      margin: 0
     });
 
-    const btnX = 8.3, btnY = 4.675, btnW = 1.2, btnH = 0.45;
+    const btnX = 8.3;
+    const btnY = 4.675;
+    const btnW = 1.2;
+    const btnH = 0.45;
+
     slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
-      x: btnX, y: btnY, w: btnW, h: btnH,
+      x: btnX,
+      y: btnY,
+      w: btnW,
+      h: btnH,
       fill: { color: "E0E0E0" },
       line: { color: "BBBBBB", width: 1 },
-      rectRadius: 0.05,
+      rectRadius: 0.05
     });
+
     slide.addText("Next >", {
-      x: btnX, y: btnY, w: btnW, h: btnH,
+      x: btnX,
+      y: btnY,
+      w: btnW,
+      h: btnH,
       fontSize: 14,
       fontFace: "Calibri",
       color: "111111",
       align: "center",
       valign: "middle",
-      margin: 0,
+      margin: 0
     });
 
     const tmpFile = path.join(os.tmpdir(), `slide-${crypto.randomUUID()}.pptx`);
     await pres.writeFile({ fileName: tmpFile });
 
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-    res.setHeader("Content-Disposition", 'attachment; filename="Slide_1.pptx"');
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="Slide_1.pptx"'
+    );
 
     const stream = fs.createReadStream(tmpFile);
     stream.pipe(res);
@@ -124,4 +199,6 @@ app.post("/generate-slide", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`PPTX microservice running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`PPTX microservice running on port ${PORT}`)
+);
