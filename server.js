@@ -61,6 +61,12 @@ app.post("/generate-slide", async (req, res) => {
       topBarColor,
       topBarHeight,
 
+      logoUrl,
+      logoX,
+      logoY,
+      logoWidth,
+      logoHeight,
+
       contentTop,
 
       rightColumnX,
@@ -96,9 +102,14 @@ app.post("/generate-slide", async (req, res) => {
     const safeTopBarColor = str(topBarColor, "4A72B0");
     const safeTopBarHeight = num(topBarHeight, 0.8);
 
+    const safeLogoUrl = str(logoUrl, "");
+    const safeLogoX = num(logoX, 0.4);
+    const safeLogoY = num(logoY, 0.15);
+    const safeLogoWidth = num(logoWidth, 0.5);
+    const safeLogoHeight = num(logoHeight, 0.5);
+
     const safeContentTop = num(contentTop, 1.35);
 
-    // TEXT ALWAYS USES RIGHT COLUMN
     const safeTextX = num(rightColumnX, 4.3);
     const safeTextWidth = num(rightColumnWidth, 5.2);
 
@@ -114,9 +125,8 @@ app.post("/generate-slide", async (req, res) => {
     const safeBodyAlign = str(bodyAlign, "left");
 
     const safeSpacingBelowHeading = num(spacingBelowHeading, 0.3);
-    const safeParagraphSpacingPt = num(paragraphSpacingPt, 3);
+    const safeParagraphSpacingPt = num(paragraphSpacingPt, 2);
 
-    // IMAGE USES IMAGE RULES ONLY
     const safeImageX = num(imageX, 0.5);
     const safeImageY = num(imageY, 1.35);
     const safeImageWidth = num(imageWidth, 3.3);
@@ -126,6 +136,12 @@ app.post("/generate-slide", async (req, res) => {
 
     if (!imgBase64 && imageUrl) {
       imgBase64 = await downloadImage(imageUrl);
+    }
+
+    let logoBase64 = "";
+
+    if (safeLogoUrl) {
+      logoBase64 = await downloadImage(safeLogoUrl);
     }
 
     const pres = new PptxGenJS();
@@ -147,26 +163,18 @@ app.post("/generate-slide", async (req, res) => {
       line: { color: safeTopBarColor, width: 0 }
     });
 
-    // Simple white home icon
-    slide.addShape(pres.shapes.ISOSCELES_TRIANGLE, {
-      x: 0.44,
-      y: 0.1,
-      w: 0.42,
-      h: 0.22,
-      fill: { color: "FFFFFF" },
-      line: { color: "FFFFFF", width: 0 }
-    });
+    // Logo from global YAML
+    if (logoBase64) {
+      slide.addImage({
+        data: "image/png;base64," + logoBase64,
+        x: safeLogoX,
+        y: safeLogoY,
+        w: safeLogoWidth,
+        h: safeLogoHeight
+      });
+    }
 
-    slide.addShape(pres.shapes.RECTANGLE, {
-      x: 0.5,
-      y: 0.3,
-      w: 0.3,
-      h: 0.26,
-      fill: { color: "FFFFFF" },
-      line: { color: "FFFFFF", width: 0 }
-    });
-
-    // Image on left
+    // Main slide image from slide YAML URL + global image position rules
     if (imgBase64) {
       slide.addImage({
         data: "image/png;base64," + imgBase64,
